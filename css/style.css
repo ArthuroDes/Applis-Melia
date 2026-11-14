@@ -245,3 +245,6 @@ details.datatable td, details.datatable th { padding: 4px 6px; border-bottom: 1p
 .switch { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .switch input { width: 22px; height: 22px; accent-color: var(--accent); }
 .hidden { display: none !important; }
+
+.abbr { font-size: .8em; color: var(--muted); font-weight: 600; }
+.choice .abbr { display: block; margin-top: 2px; }

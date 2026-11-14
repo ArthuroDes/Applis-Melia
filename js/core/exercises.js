@@ -4,13 +4,56 @@
 
 const EN = {
   /* Phrase anglaise dont chaque mot est cliquable (prononciation) */
-  html(sentence) {
+  /* Abréviations : développées entre parenthèses (anglais – français) à leur 1re apparition */
+  ABBR: {
+    AMM: 'Aircraft Maintenance Manual – manuel de maintenance', IPC: 'Illustrated Parts Catalogue – catalogue illustré des pièces',
+    SRM: 'Structural Repair Manual – manuel de réparation structurale', CMM: 'Component Maintenance Manual – manuel de maintenance des composants',
+    WDM: 'Wiring Diagram Manual – manuel des schémas électriques', FIM: 'Fault Isolation Manual – manuel de recherche de pannes',
+    TSM: 'Troubleshooting Manual – manuel de dépannage', AFM: 'Aircraft Flight Manual – manuel de vol',
+    MEL: 'Minimum Equipment List – liste minimale d\'équipements', MMEL: 'Master Minimum Equipment List – liste minimale de référence',
+    AD: 'Airworthiness Directive – consigne de navigabilité', ADs: 'Airworthiness Directives – consignes de navigabilité',
+    SB: 'Service Bulletin – bulletin de service', EWIS: 'Electrical Wiring Interconnection System – système de câblage électrique',
+    ATA: 'Air Transport Association – chapitres techniques', EASA: 'European Union Aviation Safety Agency – Agence européenne de la sécurité aérienne',
+    CAA: 'Civil Aviation Authority – autorité de l\'aviation civile', FAA: 'Federal Aviation Administration – autorité américaine',
+    NDT: 'Non-Destructive Testing – contrôle non destructif', APU: 'Auxiliary Power Unit – groupe auxiliaire de puissance',
+    CRS: 'Certificate of Release to Service – certificat de remise en service', PPE: 'Personal Protective Equipment – équipement de protection individuelle',
+    FOD: 'Foreign Object Debris – corps étrangers / débris', 'P/N': 'Part Number – référence de pièce', 'S/N': 'Serial Number – numéro de série',
+    NLG: 'Nose Landing Gear – train avant', MLG: 'Main Landing Gear – train principal', RPM: 'Revolutions Per Minute – tours par minute',
+    PSI: 'Pounds per Square Inch – livres par pouce carré', psi: 'pounds per square inch – livres par pouce carré', GPS: 'Global Positioning System – système de positionnement',
+    EPI: 'Équipement de protection individuelle', CND: 'Contrôle non destructif', 'Part-66': 'réglementation des licences de maintenance',
+    'Part-145': 'agrément des organismes de maintenance'
+  },
+  _abbrKey(clean) { return EN.ABBR[clean] ? clean : null; },
+  /* skip : expansions à ne pas révéler (ex. question « que signifie CRS ? ») */
+  html(sentence, skip) {
+    const seen = new Set((skip || []).concat(EN.abbrSkip([sentence])));
     return String(sentence).split(/(\s+)/).map(tok => {
       if (/^\s+$/.test(tok)) return tok;
-      const clean = tok.replace(/^[^\w']+|[^\w']+$/g, '');
+      const clean = tok.replace(/^[^\w'/-]+|[^\w'/-]+$/g, '');
       if (!clean) return U.esc(tok);
-      return `<span class="en-word" data-say="${U.esc(clean)}">${U.esc(tok)}</span>`;
+      let out = `<span class="en-word" data-say="${U.esc(clean)}">${U.esc(tok)}</span>`;
+      const k = EN._abbrKey(clean);
+      if (k && !seen.has(k)) {
+        seen.add(k);
+        const trail = tok.slice(tok.lastIndexOf(clean) + clean.length), head = tok.slice(0, tok.length - trail.length);
+        out = `<span class="en-word" data-say="${U.esc(clean)}">${U.esc(head)}</span> <span class="abbr">(${U.esc(EN.ABBR[k])})</span>${U.esc(trail)}`;
+      }
+      return out;
     }).join('');
+  },
+  /* Version texte simple (options de QCM, questions) */
+  abbr(text, skip) {
+    const seen = new Set((skip || []).concat(EN.abbrSkip([text])));
+    return U.esc(text).replace(/(^|[^\w/-])([A-Za-z]+(?:[/-][A-Za-z0-9]+)?)(?=$|[^\w/-])/g, (m, pre, w) => {
+      const k = EN._abbrKey(w);
+      if (!k || seen.has(k)) return m;
+      seen.add(k); return `${pre}${w} <span class="abbr">(${U.esc(EN.ABBR[k])})</span>`;
+    });
+  },
+  /* Abréviations dont l'expansion figure dans les réponses proposées : ne pas les révéler */
+  abbrSkip(options) {
+    const txt = options.join(' ').toLowerCase();
+    return Object.keys(EN.ABBR).filter(k => EN.ABBR[k].split(' – ').some(part => txt.includes(part.toLowerCase())));
   },
   play(text, label, opts) {
     return `<button class="playbtn ${opts || ''}" data-play="${U.esc(text)}" aria-label="${label || 'Écouter'}">🔊</button>`;
@@ -88,10 +131,11 @@ const Ex = {
   /* ---------- QCM générique ---------- */
   _mc(el, ctx, o) {
     const opts = U.shuffle(o.options);
+    const skip = EN.abbrSkip(o.options);
     let sel = null;
     el.innerHTML = `<div class="ex-kind">${o.kind}</div><div class="ex-title">${o.title}</div>
       ${o.top || ''}<div class="prompt">${o.prompt || ''}</div>
-      <div class="choices ${o.grid ? 'grid2' : ''}">${opts.map((x, i) => `<button class="choice" data-i="${i}" ${o.sayOptions ? `data-say="${U.esc(U.main(x))}"` : ''}>${o.render ? o.render(x) : U.esc(x)}</button>`).join('')}</div>`;
+      <div class="choices ${o.grid ? 'grid2' : ''}">${opts.map((x, i) => `<button class="choice" data-i="${i}" ${o.sayOptions ? `data-say="${U.esc(U.main(x))}"` : ''}>${o.render ? o.render(x) : EN.abbr(x, skip)}</button>`).join('')}</div>`;
     U.$$('.choice', el).forEach(b => b.addEventListener('click', () => {
       U.$$('.choice', el).forEach(c => c.classList.remove('sel'));
       b.classList.add('sel'); sel = opts[+b.dataset.i]; ctx.ready(true);
@@ -109,7 +153,7 @@ const Ex = {
 
   /* ---------- QCM libre (tests de positionnement) ---------- */
   mcq(el, step, ctx) {
-    return Ex._mc(el, ctx, { kind: step.kind || 'Question', title: step.title || 'Choisissez la bonne réponse', prompt: U.esc(step.q), options: step.options, answer: step.answer, words: [] });
+    return Ex._mc(el, ctx, { kind: step.kind || 'Question', title: step.title || 'Choisissez la bonne réponse', prompt: EN.abbr(step.q, EN.abbrSkip(step.options)), options: step.options, answer: step.answer, words: [] });
   },
 
   /* ---------- Choisir la traduction ---------- */
