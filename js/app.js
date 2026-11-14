@@ -14,6 +14,7 @@ const App = {
     App.go(location.hash.slice(1) || 'home', true);
     if (!Store.state.onboarded) setTimeout(App.onboarding, 300);
     App.reminderLoop();
+    window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); App.installEvt = e; if (App.view === 'home') App.home(); });
     if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
   },
 
@@ -85,6 +86,7 @@ const App = {
         <div class="stat"><div class="v">${Math.round(today.min)}/${goal}</div><div class="l">min aujourd'hui</div></div>
       </div>
       <div class="progressbar" style="margin-bottom:16px" title="Objectif du jour"><div style="width:${pct}%"></div></div>
+      ${App.installBanner()}
       ${placementTodo ? `<div class="banner blue">🧭 <div style="flex:1"><b>Tests de positionnement</b><div class="small">Évaluez votre niveau (conversationnel et technique aéro) pour démarrer au bon palier.</div></div><button class="btn" data-placement>Passer</button></div>` : ''}
       <div class="card">
         <div class="row" style="justify-content:space-between"><div><div class="ex-kind">Prochaine étape recommandée</div><h2 style="margin:4px 0">${U.esc(Data.cats[next.cat].icon)} ${U.esc(next.title)}</h2>
@@ -104,6 +106,8 @@ const App = {
       <p class="small muted" style="margin:0 0 8px">Votre route de vol : chaque nuage est un palier, chaque balise une leçon. ${Data.doneCount(App.track)}/${tr.lessons.length} leçons effectuées.</p>
       <div class="skymap" id="skymap">${App.skyMap(App.track)}</div>
     </div>`);
+    const inst = m.querySelector('[data-install]');
+    if (inst) inst.onclick = () => { App.installEvt.prompt(); App.installEvt = null; App.home(); };
     m.querySelectorAll('[data-start]').forEach(b => b.onclick = () => App.openLesson(Data.byId[b.dataset.start]));
     m.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => App.go(b.dataset.goto));
     m.querySelectorAll('[data-placement]').forEach(b => b.onclick = App.placementMenu);
@@ -119,6 +123,15 @@ const App = {
       const r = cur.getBoundingClientRect(), mr = map.getBoundingClientRect();
       map.scrollTop += (r.top - mr.top) - map.clientHeight / 2 + r.height / 2;
     });
+  },
+
+  /* Invitation à installer l'appli sur l'écran d'accueil */
+  installBanner() {
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+    if (standalone || !/^https?:/.test(location.protocol)) return '';
+    if (App.installEvt) return `<div class="banner blue">📲 <div style="flex:1"><b>Installer l'application</b><div class="small">Ajoutez AeroEnglish à votre écran d'accueil : elle fonctionnera comme une appli, même hors ligne.</div></div><button class="btn" data-install>Installer</button></div>`;
+    if (/iphone|ipad|ipod/i.test(navigator.userAgent)) return `<div class="banner blue">📲 <div class="small"><b>Installer sur iPhone :</b> dans Safari, touchez le bouton <b>Partager</b> (carré avec une flèche ↑), puis <b>« Sur l'écran d'accueil »</b>.</div></div>`;
+    return '';
   },
 
   /* Carte du ciel : route de vol ascendante (1re leçon en bas), traînées de condensation */
