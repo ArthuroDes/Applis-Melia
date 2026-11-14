@@ -188,7 +188,7 @@ window.PLACEMENT = {
     ['"Couple de serrage" : tighten to the correct ___', ['torque', 'thrust', 'tension'], 0, 2],
     ['Which manual gives part numbers?', ['IPC', 'AFM', 'MEL'], 0, 3],
     ['"Ressuage" en anglais :', ['Dye penetrant inspection', 'Eddy current testing', 'Borescope inspection'], 0, 3],
-    ['An AD is…', ['mandatory', 'optional', 'only for pilots'], 0, 3],
+    ['An Airworthiness Directive (AD) is…', ['mandatory', 'optional', 'only for pilots'], 0, 3],
     ['"Bleed air" comes from…', ['the engine compressor', 'the fuel tank', 'the cabin'], 0, 3],
     ['"La pièce doit être déposée" :', ['The part must be removed.', 'The part must remove.', 'The part is removing.'], 0, 4],
     ['"Do not open the line ___ the pressure is zero."', ['unless', 'because', 'whereas'], 0, 4],

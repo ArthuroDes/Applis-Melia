@@ -1905,7 +1905,7 @@ window.PLACEMENT = {
     ['"Couple de serrage" : tighten to the correct ___', ['torque', 'thrust', 'tension'], 0, 2],
     ['Which manual gives part numbers?', ['IPC', 'AFM', 'MEL'], 0, 3],
     ['"Ressuage" en anglais :', ['Dye penetrant inspection', 'Eddy current testing', 'Borescope inspection'], 0, 3],
-    ['An AD is…', ['mandatory', 'optional', 'only for pilots'], 0, 3],
+    ['An Airworthiness Directive (AD) is…', ['mandatory', 'optional', 'only for pilots'], 0, 3],
     ['"Bleed air" comes from…', ['the engine compressor', 'the fuel tank', 'the cabin'], 0, 3],
     ['"La pièce doit être déposée" :', ['The part must be removed.', 'The part must remove.', 'The part is removing.'], 0, 4],
     ['"Do not open the line ___ the pressure is zero."', ['unless', 'because', 'whereas'], 0, 4],
@@ -2452,6 +2452,7 @@ const EN = {
   _abbrKey(clean) { return EN.ABBR[clean] ? clean : null; },
   /* skip : expansions à ne pas révéler (ex. question « que signifie CRS ? ») */
   html(sentence, skip) {
+    if (skip === true) return EN.html(sentence, Object.keys(EN.ABBR));
     const seen = new Set((skip || []).concat(EN.abbrSkip([sentence])));
     return String(sentence).split(/(\s+)/).map(tok => {
       if (/^\s+$/.test(tok)) return tok;
@@ -2476,6 +2477,11 @@ const EN = {
       seen.add(k); return `${pre}${w} <span class="abbr">(${U.esc(EN.ABBR[k])})</span>`;
     });
   },
+  /* Pour les questions qui TESTENT un mot : on retire du français et des définitions
+     la signification anglaise des abréviations (sinon la réponse est donnée) */
+  isAbbrWord(w) { return w.cat === 'docs' || /\([A-Z/]{2,}\)/.test(w.en); },
+  frQ(fr) { return String(fr).replace(/\s*\((?=[A-Z])[^)]*\)\s*$/, ''); },
+  defQ(w) { return EN.isAbbrWord(w) && /^[^:]{3,60}:\s/.test(w.def) ? w.def.replace(/^[^:]+:\s*/, '').replace(/^./, c => c.toUpperCase()) : w.def; },
   /* Abréviations dont l'expansion figure dans les réponses proposées : ne pas les révéler */
   abbrSkip(options) {
     const txt = options.join(' ').toLowerCase();
@@ -2557,11 +2563,10 @@ const Ex = {
   /* ---------- QCM générique ---------- */
   _mc(el, ctx, o) {
     const opts = U.shuffle(o.options);
-    const skip = EN.abbrSkip(o.options);
     let sel = null;
     el.innerHTML = `<div class="ex-kind">${o.kind}</div><div class="ex-title">${o.title}</div>
       ${o.top || ''}<div class="prompt">${o.prompt || ''}</div>
-      <div class="choices ${o.grid ? 'grid2' : ''}">${opts.map((x, i) => `<button class="choice" data-i="${i}" ${o.sayOptions ? `data-say="${U.esc(U.main(x))}"` : ''}>${o.render ? o.render(x) : EN.abbr(x, skip)}</button>`).join('')}</div>`;
+      <div class="choices ${o.grid ? 'grid2' : ''}">${opts.map((x, i) => `<button class="choice" data-i="${i}" ${o.sayOptions ? `data-say="${U.esc(U.main(x))}"` : ''}>${o.render ? o.render(x) : U.esc(x)}</button>`).join('')}</div>`;
     U.$$('.choice', el).forEach(b => b.addEventListener('click', () => {
       U.$$('.choice', el).forEach(c => c.classList.remove('sel'));
       b.classList.add('sel'); sel = opts[+b.dataset.i]; ctx.ready(true);
@@ -2587,14 +2592,14 @@ const Ex = {
     const w = Data.words[step.word];
     const kind = step.eval ? 'Évaluation finale' : 'Traduction';
     if (step.dir === 'en2fr') {
-      return Ex._mc(el, ctx, { kind, title: 'Quelle est la traduction ?', top: `<div class="row">${EN.play(U.main(w.en))}<div class="prompt" style="margin:0"><b>${EN.html(w.en)}</b></div></div>`,
-        options: [w.fr].concat(Data.distractors(w, 3, 'fr')), answer: w.fr, words: [w.id] });
+      return Ex._mc(el, ctx, { kind, title: 'Quelle est la traduction ?', top: `<div class="row">${EN.play(U.main(w.en))}<div class="prompt" style="margin:0"><b>${EN.html(w.en, true)}</b></div></div>`,
+        options: U.uniq([EN.frQ(w.fr)].concat(Data.distractors(w, 3, 'fr').map(EN.frQ))), answer: EN.frQ(w.fr), words: [w.id] });
     }
-    if (step.dir === 'def2en') {
-      return Ex._mc(el, ctx, { kind, title: 'Quel mot correspond à cette définition ?', prompt: EN.html(w.def),
+    if (step.dir === 'def2en' && !(EN.isAbbrWord(w) && EN.defQ(w) === w.def)) {
+      return Ex._mc(el, ctx, { kind, title: 'Quel mot correspond à cette définition ?', prompt: EN.html(EN.defQ(w), true),
         options: [w.en].concat(Data.distractors(w, 3)), answer: w.en, words: [w.id], sayOptions: true, sayAnswer: U.main(w.en) });
     }
-    return Ex._mc(el, ctx, { kind, title: 'Choisissez la bonne traduction anglaise', prompt: `« <b>${U.esc(w.fr)}</b> »`,
+    return Ex._mc(el, ctx, { kind, title: 'Choisissez la bonne traduction anglaise', prompt: `« <b>${U.esc(EN.frQ(w.fr))}</b> »`,
       options: [w.en].concat(Data.distractors(w, 3)), answer: w.en, words: [w.id], sayOptions: true, sayAnswer: U.main(w.en) });
   },
 
@@ -2602,7 +2607,7 @@ const Ex = {
   picture(el, step, ctx) {
     const w = Data.words[step.word];
     return Ex._mc(el, ctx, { kind: 'Reconnaissance', title: 'Quel est ce composant / cet objet ?',
-      top: `<div class="vcard"><div class="illus" style="height:120px;font-size:5rem">${EN.illus(w)}</div><div class="center muted small" style="text-align:center">${U.esc(w.def)}</div></div>`,
+      top: `<div class="vcard"><div class="illus" style="height:120px;font-size:5rem">${EN.illus(w)}</div><div class="center muted small" style="text-align:center">${U.esc(EN.defQ(w))}</div></div>`,
       options: [w.en].concat(Data.distractors(w, 3)), answer: w.en, words: [w.id], sayOptions: true, sayAnswer: U.main(w.en) });
   },
 
@@ -2611,7 +2616,7 @@ const Ex = {
     const w = Data.words[step.word], f = EN.findInEx(w);
     const opts = [f.match].concat(Data.distractors(w, 3).map(x => U.main(x)));
     return Ex._mc(el, ctx, { kind: 'Exercice à trous', title: 'Complétez la phrase',
-      prompt: `${EN.html(f.before)} <b style="color:var(--accent)">_____</b> ${EN.html(f.after)}<div class="small muted" style="margin-top:6px">${U.esc(w.exFr)}</div>`,
+      prompt: `${EN.html(f.before)} <b style="color:var(--accent)">_____</b> ${EN.html(f.after)}${EN.isAbbrWord(w) ? '' : `<div class="small muted" style="margin-top:6px">${U.esc(w.exFr)}</div>`}`,
       options: U.uniq(opts), answer: f.match, words: [w.id], sayOptions: true, sayAnswer: w.ex });
   },
 
@@ -2627,7 +2632,7 @@ const Ex = {
       <div class="pairs"><div class="col">${left.map(w => audio
         ? `<button class="pair" data-l="${w.id}" aria-label="audio">🔊</button>`
         : `<button class="pair" data-l="${w.id}" data-say="${U.esc(U.main(w.en))}">${U.esc(U.main(w.en))}</button>`).join('')}</div>
-      <div class="col">${right.map(w => `<button class="pair" data-r="${w.id}">${U.esc(w.fr)}</button>`).join('')}</div></div>`;
+      <div class="col">${right.map(w => `<button class="pair" data-r="${w.id}">${U.esc(EN.frQ(w.fr))}</button>`).join('')}</div></div>`;
     const tryMatch = () => {
       if (!selL || !selR) return;
       const bl = el.querySelector(`[data-l="${selL}"]`), br = el.querySelector(`[data-r="${selR}"]`);
@@ -2763,7 +2768,7 @@ const Ex = {
     const w = Data.words[step.word], f = EN.findInEx(w);
     el.innerHTML = `<div class="ex-kind">Production écrite</div><div class="ex-title">Complétez en traduisant le mot entre parenthèses</div>
       <div class="prompt">${EN.html(f.before)} <input class="textin" style="display:inline-block;width:auto;min-width:150px;padding:6px 10px" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="traduction"> ${EN.html(f.after)}</div>
-      <p>(<b>${U.esc(w.fr)}</b>)</p>`;
+      <p>(<b>${U.esc(EN.frQ(w.fr))}</b>)</p>`;
     const inp = el.querySelector('input');
     inp.addEventListener('input', () => ctx.ready(inp.value.trim().length > 0));
     inp.addEventListener('keydown', e => { if (e.key === 'Enter' && inp.value.trim()) ctx.submit(); });
