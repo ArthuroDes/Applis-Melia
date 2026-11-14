@@ -7,7 +7,11 @@ const FILES = ['./', 'index.html', 'manifest.json', 'icons/icon.svg', 'css/style
   'js/core/exercises.js', 'js/core/lesson.js', 'js/core/ai.js', 'js/app.js'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))); self.clients.claim(); });
+/* Réseau d'abord : chaque mise à jour publiée est récupérée dès que le téléphone est en ligne ;
+   hors ligne, on sert la dernière version en cache. */
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
-  e.respondWith(caches.match(e.request).then(r => r || fetch(e.request).then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return res; })));
+  e.respondWith(fetch(e.request).then(res => {
+    const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return res;
+  }).catch(() => caches.match(e.request, { ignoreSearch: true })));
 });
