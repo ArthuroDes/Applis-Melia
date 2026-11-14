@@ -1,0 +1,11 @@
+{
+  "name": "AeroEnglish",
+  "short_name": "AeroEnglish",
+  "description": "Anglais technique aéronautique et conversationnel",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f8f3ea",
+  "theme_color": "#2f6fb8",
+  "lang": "fr",
+  "icons": [{ "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
