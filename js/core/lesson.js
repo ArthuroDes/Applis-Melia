@@ -16,6 +16,81 @@ const Lesson = {
     return pool[n % pool.length];
   },
 
+  /* Dialogue de fin de séance généré à partir du vocabulaire de la séance :
+     personnage, ouverture, types de questions et mots changent à chaque fois. */
+  dynamicDialogue(W, L) {
+    const conv = L.track === 'conv';
+    const cast = conv ? ['oliver', 'grace', 'nadia'] : ['sam', 'nadia', 'grace'];
+    const who = U.pick(cast);
+    const pool = W.length >= 3 ? W : W.concat(Data.cats[L.cat].words.filter(w => !W.includes(w)));
+    const others = w => U.shuffle(pool.filter(x => x.id !== w.id && U.norm(x.en) !== U.norm(w.en)).concat(
+      Data.cats[L.cat].words.filter(x => x.id !== w.id && !pool.includes(x))));
+    const name = w => U.main(w.en);
+    const scramble = (sent, alt) => {
+      const end = (String(sent).match(/[.?!]$/) || ['.'])[0];
+      const keepCap = x => /^(I|I'm|I'd|I'll|I've)$/.test(x) || /^[A-Z0-9][A-Z0-9/-]+$/.test(x) || /^[A-Z][a-z]+$/.test(x) && false;
+      const t = U.tokens(sent).map((x, k) => k === 0 && !keepCap(x) && !/^[A-Z]{2,}/.test(x) ? x.charAt(0).toLowerCase() + x.slice(1) : x);
+      if (t.length < 4) return alt;
+      const i = 1 + Math.floor(Math.random() * (t.length - 2));
+      [t[i], t[i - 1]] = [t[i - 1], t[i]];
+      t[0] = t[0].charAt(0).toUpperCase() + t[0].slice(1);
+      const out = t.join(' ') + end;
+      return U.norm(out) === U.norm(sent) ? alt : out;
+    };
+    const openers = conv ? [
+      ["Hello! Let's practise the expressions from today's lesson. Are you ready?", "Bonjour ! Pratiquons les expressions de la leçon du jour. Tu es prêt ?"],
+      ["Hi there! I'd like to have a quick chat with you using today's expressions. OK?", "Salut ! J'aimerais discuter rapidement avec toi en utilisant les expressions du jour. D'accord ?"],
+      ["Good to see you again! Shall we check what you remember from today?", "Content de te revoir ! On vérifie ce dont tu te souviens aujourd'hui ?"]
+    ] : [
+      ["Hi! Before the end of the shift, let's check today's vocabulary. Ready?", "Salut ! Avant la fin de l'équipe, vérifions le vocabulaire du jour. Prêt ?"],
+      ["Welcome back to the hangar! I've got a few questions about the words you've just learnt.", "Bon retour au hangar ! J'ai quelques questions sur les mots que tu viens d'apprendre."],
+      ["Good morning! The aircraft is ready for you, but first, a quick vocabulary check. OK?", "Bonjour ! L'avion t'attend, mais d'abord, une petite vérification du vocabulaire. D'accord ?"],
+      ["Hello! Let's talk about what you've studied today.", "Bonjour ! Parlons de ce que tu as étudié aujourd'hui."]
+    ];
+    const readyAns = U.pick([
+      [["Yes, I'm ready.", "Yes, I ready.", "Yes, I am agree."], "Oui, je suis prêt."],
+      [["OK, let's go!", "OK, let's going!", "OK, we go yesterday."], "D'accord, allons-y !"],
+      [["Sure, no problem.", "Sure, no problems is.", "Sure, I am no problem."], "Bien sûr, pas de problème."]
+    ]);
+    const react = () => U.pick(['Exactly!', 'Well done.', 'Perfect.', "That's right.", 'Good answer.', 'Great.']);
+    const types = U.shuffle(['meaning', 'name', 'example', 'translate']);
+    const chosen = U.sample(W, Math.min(3, W.length));
+    const lines = [];
+    const op = U.pick(openers);
+    lines.push({ t: op[0], fr: op[1] });
+    lines.push({ s: readyAns[0], fr: readyAns[1] });
+    chosen.forEach((w, i) => {
+      const [d1, d2] = others(w);
+      if (!d1 || !d2) return;
+      const pre = i === 0 ? (conv ? 'First one. ' : 'First question. ') : react() + ' ';
+      const ty = types[i % types.length];
+      if (ty === 'meaning') {
+        lines.push({ t: pre + `What does "${name(w)}" mean?`, fr: `Que signifie « ${name(w)} » ?`, plain: true });
+        lines.push({ s: [EN.defQ(w), EN.defQ(d1), EN.defQ(d2)], fr: '= ' + EN.frQ(w.fr), plain: true });
+      } else if (ty === 'name') {
+        lines.push({ t: pre + (conv ? `Which expression do we use for this: ${EN.defQ(w).replace(/\.$/, '').replace(/^./, c => c.toLowerCase())}?` : `${EN.defQ(w)} What do we call that?`),
+          fr: conv ? 'Quelle expression utilise-t-on pour cela ?' : 'Comment appelle-t-on cela ?', plain: true });
+        const f = x => conv ? `We say: "${name(x)}"` : `It's called "${name(x)}".`;
+        lines.push({ s: [f(w), f(d1), f(d2)], fr: (conv ? 'On dit : ' : "Ça s'appelle : ") + '« ' + name(w) + ' » (' + EN.frQ(w.fr) + ')', plain: true });
+      } else if (ty === 'example') {
+        lines.push({ t: pre + `Can you use "${name(w)}" in a sentence?`, fr: `Peux-tu utiliser « ${name(w)} » dans une phrase ?`, plain: true });
+        lines.push({ s: [w.ex, scramble(w.ex, d2.ex), d1.ex], fr: w.exFr });
+      } else {
+        lines.push({ t: pre + `How would you say this in English: « ${w.exFr} »`, fr: 'Comment dirais-tu ceci en anglais ?' });
+        lines.push({ s: [w.ex, scramble(w.ex, d2.ex), d1.ex], fr: w.exFr });
+      }
+    });
+    const close = U.pick([
+      ["Excellent work today. See you next time!", "Excellent travail aujourd'hui. À la prochaine !", [["Thank you! See you next time.", "Thank you! See you last time.", "Thanks, I see you yesterday."], "Merci ! À la prochaine."]],
+      ["Great session. Don't forget to review these words tomorrow.", "Super séance. N'oublie pas de réviser ces mots demain.", [["I won't forget. Thanks for your help!", "I don't will forget. Thanks your help!", "I forget not. Thank for help!"], "Je n'oublierai pas. Merci pour ton aide !"]],
+      ["You're making good progress. Any questions?", "Tu progresses bien. Des questions ?", [["No, it's clear. Thank you very much!", "No, it's clearly. Thank you much very!", "No, I am clear. Thanks you!"], "Non, c'est clair. Merci beaucoup !"]]
+    ]);
+    lines.push({ t: react() + ' ' + close[0], fr: close[1] });
+    lines.push({ s: close[2][0], fr: close[2][1] });
+    const ch = CHARACTERS[who];
+    return { cat: L.cat, who, title: conv ? 'Mise en pratique des expressions du jour' : 'Vérification du vocabulaire avec ' + ch.name, lines };
+  },
+
   build(L) {
     const cat = Data.cats[L.cat], track = L.track, n = L.n;
     const review = L.kind === 'review';
@@ -78,7 +153,9 @@ const Lesson = {
       const ww = cyc(A, 5);
       steps.push({ type: 'writing', prompt: `Écrivez une phrase personnelle en anglais avec « ${U.main(ww.en)} » (${ww.fr}).`, keywords: [U.main(ww.en).replace(/^to /i, '')], minWords: 5, words: [ww.id], model: ww.ex });
     }
-    steps.push({ type: 'dialogue', d: Lesson.dialogueFor(L.cat, track, n) });
+    // Dialogue : généré à partir des mots de la séance ; le bilan garde le scénario métier de la catégorie
+    const own = DIALOGUES.filter(d => d.cat === L.cat);
+    steps.push({ type: 'dialogue', d: review && own.length ? U.pick(own) : Lesson.dynamicDialogue(W, L) });
     // Évaluation finale
     const evalN = review ? 8 : 5;
     U.shuffle(W).slice(0, evalN).forEach((w, i) => steps.push({ type: 'choose', dir: ['fr2en', 'en2fr', 'def2en'][i % 3], word: w.id, eval: true }));

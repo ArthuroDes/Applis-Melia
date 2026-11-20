@@ -520,7 +520,7 @@ const Ex = {
       if (li >= d.lines.length) { ans.innerHTML = ''; ctx.complete({ ok: errors === 0, solution: errors ? errors + ' réponse(s) inadaptée(s)' : 'Conversation réussie !', words: [], silent: false }); return; }
       const line = d.lines[li];
       if (line.t) {
-        chat.insertAdjacentHTML('beforeend', `<div class="speaker"><div class="avatar" style="border-color:${ch.color}">${ch.avatar}</div><div class="bubble them"><button class="playbtn mini" data-play="${U.esc(line.t)}" style="float:right;margin-left:6px">🔊</button>${EN.html(line.t)}<details class="tr"><summary>Traduction</summary>${U.esc(line.fr)}</details></div></div>`);
+        chat.insertAdjacentHTML('beforeend', `<div class="speaker"><div class="avatar" style="border-color:${ch.color}">${ch.avatar}</div><div class="bubble them"><button class="playbtn mini" data-play="${U.esc(line.t)}" style="float:right;margin-left:6px">🔊</button>${EN.html(line.t, line.plain || undefined)}<details class="tr"><summary>Traduction</summary>${U.esc(line.fr)}</details></div></div>`);
         chat.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'end' });
         li++; sayT(line.t); setTimeout(next, 600);
       } else {
@@ -529,7 +529,7 @@ const Ex = {
           ${Voice.hasSR() ? '<div style="text-align:center;margin-top:10px"><button class="mic" style="width:64px;height:64px;font-size:1.6rem" aria-label="Répondre à voix haute">🎤</button></div>' : ''}`;
         const accept = () => {
           Voice.good(); ans.innerHTML = '';
-          chat.insertAdjacentHTML('beforeend', `<div class="bubble me">${EN.html(right)}<div class="tr">${U.esc(line.fr)}</div></div>`);
+          chat.insertAdjacentHTML('beforeend', `<div class="bubble me">${EN.html(right, line.plain || undefined)}<div class="tr">${U.esc(line.fr)}</div></div>`);
           chat.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'end' });
           li++; setTimeout(next, 500);
         };
