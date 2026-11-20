@@ -3003,7 +3003,9 @@ const Lesson = {
   dynamicDialogue(W, L) {
     const conv = L.track === 'conv';
     const cast = conv ? ['oliver', 'grace', 'nadia'] : ['sam', 'nadia', 'grace'];
-    const who = U.pick(cast);
+    let prevWho = null;
+    try { prevWho = (JSON.parse(localStorage.getItem('aeroenglish.lastDialogue')) || {}).who; } catch (e) { /* ignore */ }
+    const who = U.pick(cast.filter(c => c !== prevWho));
     const pool = W.length >= 3 ? W : W.concat(Data.cats[L.cat].words.filter(w => !W.includes(w)));
     const others = w => U.shuffle(pool.filter(x => x.id !== w.id && U.norm(x.en) !== U.norm(w.en)).concat(
       Data.cats[L.cat].words.filter(x => x.id !== w.id && !pool.includes(x))));
@@ -3019,56 +3021,101 @@ const Lesson = {
       const out = t.join(' ') + end;
       return U.norm(out) === U.norm(sent) ? alt : out;
     };
+    /* Mémoire du dernier dialogue : on évite de reprendre le même personnage, la même ouverture, etc. */
+    let last = {};
+    try { last = JSON.parse(localStorage.getItem('aeroenglish.lastDialogue')) || {}; } catch (e) { last = {}; }
+    const pickNew = (arr, key) => { const ids = arr.map((_, i) => i).filter(i => i !== last[key]); const i = U.pick(ids.length ? ids : [0]); mem[key] = i; return arr[i]; };
+    const mem = {};
     const openers = conv ? [
       ["Hello! Let's practise the expressions from today's lesson. Are you ready?", "Bonjour ! Pratiquons les expressions de la leçon du jour. Tu es prêt ?"],
       ["Hi there! I'd like to have a quick chat with you using today's expressions. OK?", "Salut ! J'aimerais discuter rapidement avec toi en utilisant les expressions du jour. D'accord ?"],
-      ["Good to see you again! Shall we check what you remember from today?", "Content de te revoir ! On vérifie ce dont tu te souviens aujourd'hui ?"]
+      ["Good to see you again! Shall we check what you remember from today?", "Content de te revoir ! On vérifie ce dont tu te souviens aujourd'hui ?"],
+      ["Hey! Have you got five minutes? I'd like to test your English.", "Salut ! Tu as cinq minutes ? J'aimerais tester ton anglais."],
+      ["Good afternoon! Let's have a little conversation before you leave.", "Bon après-midi ! Discutons un peu avant que tu partes."],
+      ["Nice to see you! Let's see if today's expressions are clear for you.", "Ravi de te voir ! Voyons si les expressions du jour sont claires pour toi."]
     ] : [
       ["Hi! Before the end of the shift, let's check today's vocabulary. Ready?", "Salut ! Avant la fin de l'équipe, vérifions le vocabulaire du jour. Prêt ?"],
       ["Welcome back to the hangar! I've got a few questions about the words you've just learnt.", "Bon retour au hangar ! J'ai quelques questions sur les mots que tu viens d'apprendre."],
       ["Good morning! The aircraft is ready for you, but first, a quick vocabulary check. OK?", "Bonjour ! L'avion t'attend, mais d'abord, une petite vérification du vocabulaire. D'accord ?"],
-      ["Hello! Let's talk about what you've studied today.", "Bonjour ! Parlons de ce que tu as étudié aujourd'hui."]
+      ["Hello! Let's talk about what you've studied today.", "Bonjour ! Parlons de ce que tu as étudié aujourd'hui."],
+      ["Hey! We're waiting for a spare part, so let's use the time to practise your English.", "Salut ! On attend une pièce de rechange, profitons-en pour pratiquer ton anglais."],
+      ["Good evening! Night shift again? Let's start with a short vocabulary briefing.", "Bonsoir ! Encore de nuit ? Commençons par un petit briefing de vocabulaire."],
+      ["Hi! The inspection is finished. Can I ask you a few questions about today's words?", "Salut ! L'inspection est terminée. Je peux te poser quelques questions sur les mots du jour ?"],
+      ["Morning! Coffee first, then a quick English check. Is that OK with you?", "Bonjour ! D'abord un café, puis une petite vérification d'anglais. Ça te va ?"]
     ];
-    const readyAns = U.pick([
+    const readyAns = pickNew([
       [["Yes, I'm ready.", "Yes, I ready.", "Yes, I am agree."], "Oui, je suis prêt."],
       [["OK, let's go!", "OK, let's going!", "OK, we go yesterday."], "D'accord, allons-y !"],
-      [["Sure, no problem.", "Sure, no problems is.", "Sure, I am no problem."], "Bien sûr, pas de problème."]
-    ]);
-    const react = () => U.pick(['Exactly!', 'Well done.', 'Perfect.', "That's right.", 'Good answer.', 'Great.']);
-    const types = U.shuffle(['meaning', 'name', 'example', 'translate']);
-    const chosen = U.sample(W, Math.min(3, W.length));
+      [["Sure, no problem.", "Sure, no problems is.", "Sure, I am no problem."], "Bien sûr, pas de problème."],
+      [["Of course, go ahead.", "Of course, go ahead you.", "Of course, I go ahead yesterday."], "Bien sûr, vas-y."],
+      [["Yes, I'd like that.", "Yes, I'd like it that.", "Yes, I would liking that."], "Oui, avec plaisir."],
+      [["Sounds good to me!", "Sound good for me!", "It sound good to me!"], "Ça me va !"]
+    ], 'ready');
+    const react = () => U.pick(['Exactly!', 'Well done.', 'Perfect.', "That's right.", 'Good answer.', 'Great.', 'Spot on!', 'Correct.', 'Very good.', 'Nice one.']);
+    const allTypes = ['meaning', 'name', 'example', 'translate', 'gap', 'english'];
+    let types = U.shuffle(allTypes);
+    if (types[0] === last.firstType) types.push(types.shift());
+    mem.firstType = types[0];
+    const nWords = Math.min(W.length, U.pick([3, 4]));
+    let chosen = U.sample(W, nWords);
+    if (last.words && W.length > nWords) chosen = U.sample(W.filter(w => !last.words.includes(w.id)), nWords).concat(U.sample(W, nWords)).filter((w, i, a) => a.indexOf(w) === i).slice(0, nWords);
+    mem.words = chosen.map(w => w.id);
     const lines = [];
-    const op = U.pick(openers);
+    const op = pickNew(openers, conv ? 'opC' : 'opA');
     lines.push({ t: op[0], fr: op[1] });
     lines.push({ s: readyAns[0], fr: readyAns[1] });
+    const firsts = conv ? ['First one. ', "Let's start. ", 'Question one. '] : ['First question. ', "Let's begin. ", 'OK, first one. '];
     chosen.forEach((w, i) => {
       const [d1, d2] = others(w);
       if (!d1 || !d2) return;
-      const pre = i === 0 ? (conv ? 'First one. ' : 'First question. ') : react() + ' ';
-      const ty = types[i % types.length];
+      const pre = i === 0 ? U.pick(firsts) : react() + ' ';
+      let ty = types[i % types.length];
+      const gap = ty === 'gap' ? EN.findInEx(w) : null;
+      if (ty === 'gap' && (!gap || U.tokens(w.ex).length < 4 || gap.match.length > w.ex.length / 2)) ty = 'translate';
+      if (ty === 'english' && U.norm(EN.frQ(w.fr)) === U.norm(name(w))) ty = 'meaning';
+      const before = lines.length;
       if (ty === 'meaning') {
-        lines.push({ t: pre + `What does "${name(w)}" mean?`, fr: `Que signifie « ${name(w)} » ?`, plain: true });
+        lines.push({ t: pre + U.pick([`What does "${name(w)}" mean?`, `Can you explain the word "${name(w)}"?`, `"${name(w)}": what is it?`]), fr: `Que signifie « ${name(w)} » ?`, plain: true });
         lines.push({ s: [EN.defQ(w), EN.defQ(d1), EN.defQ(d2)], fr: '= ' + EN.frQ(w.fr), plain: true });
       } else if (ty === 'name') {
-        lines.push({ t: pre + (conv ? `Which expression do we use for this: ${EN.defQ(w).replace(/\.$/, '').replace(/^./, c => c.toLowerCase())}?` : `${EN.defQ(w)} What do we call that?`),
+        lines.push({ t: pre + (conv ? `Which expression do we use for this: ${EN.defQ(w).replace(/\.$/, '').replace(/^./, c => c.toLowerCase())}?` : `${EN.defQ(w)} ${U.pick(['What do we call that?', 'What is the word for that?', 'Do you remember the name?'])}`),
           fr: conv ? 'Quelle expression utilise-t-on pour cela ?' : 'Comment appelle-t-on cela ?', plain: true });
         const f = x => conv ? `We say: "${name(x)}"` : `It's called "${name(x)}".`;
         lines.push({ s: [f(w), f(d1), f(d2)], fr: (conv ? 'On dit : ' : "Ça s'appelle : ") + '« ' + name(w) + ' » (' + EN.frQ(w.fr) + ')', plain: true });
       } else if (ty === 'example') {
-        lines.push({ t: pre + `Can you use "${name(w)}" in a sentence?`, fr: `Peux-tu utiliser « ${name(w)} » dans une phrase ?`, plain: true });
+        lines.push({ t: pre + U.pick([`Can you use "${name(w)}" in a sentence?`, `Give me an example with "${name(w)}", please.`, `Make a sentence with "${name(w)}".`]), fr: `Peux-tu utiliser « ${name(w)} » dans une phrase ?`, plain: true });
         lines.push({ s: [w.ex, scramble(w.ex, d2.ex), d1.ex], fr: w.exFr });
+      } else if (ty === 'gap') {
+        lines.push({ t: pre + `Complete my sentence: "${gap.before}…${gap.after}"`, fr: `Complète ma phrase : « ${w.exFr} »`, plain: true });
+        const g = x => (EN.findInEx(x) || { match: name(x) }).match;
+        lines.push({ s: U.uniq([gap.match, g(d1), g(d2)]).length === 3 ? [gap.match, g(d1), g(d2)] : [gap.match, name(d1), name(d2)], fr: w.exFr, plain: true });
+      } else if (ty === 'english') {
+        lines.push({ t: pre + U.pick([`What's the English for « ${EN.frQ(w.fr)} »?`, `How do you say « ${EN.frQ(w.fr)} » in English?`]), fr: `Comment dit-on « ${EN.frQ(w.fr)} » en anglais ?`, plain: true });
+        lines.push({ s: [name(w), name(d1), name(d2)], fr: EN.frQ(w.fr), plain: true });
       } else {
         lines.push({ t: pre + `How would you say this in English: « ${w.exFr} »`, fr: 'Comment dirais-tu ceci en anglais ?' });
         lines.push({ s: [w.ex, scramble(w.ex, d2.ex), d1.ex], fr: w.exFr });
       }
+      // Sécurité : si deux réponses proposées sont identiques, on passe à la traduction de phrase
+      const sl = lines[lines.length - 1];
+      if (sl.s && U.uniq(sl.s.map(U.norm)).length < sl.s.length) {
+        lines.length = before;
+        lines.push({ t: pre + `How would you say this in English: « ${w.exFr} »`, fr: 'Comment dirais-tu ceci en anglais ?' });
+        lines.push({ s: [w.ex, scramble(w.ex, d2.ex), d1.ex], fr: w.exFr });
+      }
     });
-    const close = U.pick([
+    const close = pickNew([
       ["Excellent work today. See you next time!", "Excellent travail aujourd'hui. À la prochaine !", [["Thank you! See you next time.", "Thank you! See you last time.", "Thanks, I see you yesterday."], "Merci ! À la prochaine."]],
       ["Great session. Don't forget to review these words tomorrow.", "Super séance. N'oublie pas de réviser ces mots demain.", [["I won't forget. Thanks for your help!", "I don't will forget. Thanks your help!", "I forget not. Thank for help!"], "Je n'oublierai pas. Merci pour ton aide !"]],
-      ["You're making good progress. Any questions?", "Tu progresses bien. Des questions ?", [["No, it's clear. Thank you very much!", "No, it's clearly. Thank you much very!", "No, I am clear. Thanks you!"], "Non, c'est clair. Merci beaucoup !"]]
-    ]);
+      ["You're making good progress. Any questions?", "Tu progresses bien. Des questions ?", [["No, it's clear. Thank you very much!", "No, it's clearly. Thank you much very!", "No, I am clear. Thanks you!"], "Non, c'est clair. Merci beaucoup !"]],
+      ["That's all for today. Have a good rest!", "C'est tout pour aujourd'hui. Repose-toi bien !", [["Thanks, you too. Bye!", "Thanks, you also. Bye!", "Thank, you too. Goodbye yesterday!"], "Merci, toi aussi. Salut !"]],
+      ["Your English is getting better every day. Keep going!", "Ton anglais s'améliore chaque jour. Continue !", [["Thank you, I'll keep practising.", "Thank you, I keep practise.", "Thank you, I will to practise."], "Merci, je vais continuer à m'entraîner."]],
+      ["Good job! Shall we do another lesson tomorrow?", "Bon travail ! On fait une autre leçon demain ?", [["Yes, see you tomorrow!", "Yes, see you yesterday!", "Yes, I see you tomorrow ago!"], "Oui, à demain !"]]
+    ], 'close');
     lines.push({ t: react() + ' ' + close[0], fr: close[1] });
     lines.push({ s: close[2][0], fr: close[2][1] });
+    mem.who = who;
+    try { localStorage.setItem('aeroenglish.lastDialogue', JSON.stringify(mem)); } catch (e) { /* ignore */ }
     const ch = CHARACTERS[who];
     return { cat: L.cat, who, title: conv ? 'Mise en pratique des expressions du jour' : 'Vérification du vocabulaire avec ' + ch.name, lines };
   },
